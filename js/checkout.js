@@ -301,38 +301,44 @@
 
         <div class="pay-step" id="payStepPay">
           <div class="pay-head">
-            <h2>Pay ${amt} via UPI</h2>
-            <p>Scan the QR with any UPI app, or pay to the UPI ID below.</p>
+            <span class="pay-badge-upi">⚡ UPI Payment</span>
+            <h2>Pay ${amt}</h2>
+            <p>Scan the QR with any UPI app, or pay to our UPI ID below.</p>
           </div>
 
-          <div class="pay-timer" id="payTimer">⏱️ Complete payment within <strong>10:00</strong></div>
+          <div class="pay-timer" id="payTimer">⏱️ Complete within <strong>10:00</strong></div>
 
-          <div class="qr-box">
-            <div id="qrBox" class="qr-canvas"></div>
-            <div class="qr-fallback" id="qrFallback" style="display:none">QR couldn't load — use the UPI ID below 👇</div>
+          <div class="qr-card">
+            <div class="qr-card-top">Scan &amp; Pay</div>
+            <div class="qr-box">
+              <div id="qrBox" class="qr-canvas"></div>
+              <div class="qr-fallback" id="qrFallback" style="display:none">QR couldn't load — use the UPI ID below 👇</div>
+            </div>
+            <div class="qr-apps" aria-hidden="true"><span>GPay</span><span>PhonePe</span><span>Paytm</span><span>BHIM</span></div>
+            <div class="qr-actions">
+              <button class="btn btn-ghost btn-sm" id="qrDownload">⬇ Save QR</button>
+              <a class="btn btn-ghost btn-sm pay-open-app" href="${order.upiUri}">Open UPI app</a>
+            </div>
           </div>
 
-          <div class="qr-actions">
-            <button class="btn btn-ghost btn-sm" id="qrDownload">⬇ Download QR</button>
-            <a class="btn btn-ghost btn-sm pay-open-app" href="${order.upiUri}">Open UPI app</a>
-          </div>
+          <div class="pay-or"><span>or pay to UPI ID</span></div>
 
           <div class="upi-id-row">
-            <div>
+            <div class="upi-id-meta">
               <span class="upi-id-label">UPI ID</span>
               <strong id="upiIdText">${order.upiId}</strong>
             </div>
             <button class="btn btn-dark btn-sm" id="copyUpi" type="button">Copy</button>
           </div>
 
-          <div class="pay-amt-row">
-            <span>Amount to pay</span>
-            <strong>${amt}</strong>
+          <div class="pay-summary">
+            <div class="pay-amt-row"><span>Amount to pay</span><strong>${amt}</strong></div>
+            <div class="pay-order-row"><span>Order ID</span><code>${order.orderId}</code></div>
           </div>
-          <p class="pay-note">Order ID: <strong>${order.orderId}</strong><br>
-            Make sure you pay the <strong>exact amount</strong>. After paying, take a screenshot of the success page.</p>
 
-          <button class="btn btn-primary btn-block btn-lg" id="paidBtn">✅ I've paid — upload screenshot</button>
+          <p class="pay-note">⚠️ Pay the <strong>exact amount</strong>. After paying, take a screenshot of the success page — you'll upload it on the next step.</p>
+
+          <button class="btn btn-primary btn-block btn-lg" id="paidBtn">I've paid — upload screenshot</button>
         </div>
 
         <div class="pay-step" id="payStepProof" style="display:none">

@@ -541,34 +541,60 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   border: 1px solid var(--line); background: var(--bg-soft); color: var(--ink); font-size: 1rem; cursor: pointer; transition: .2s; }
 .pay-close:hover { border-color: var(--orange); color: var(--orange); }
 .pay-head { text-align: center; margin-bottom: 1rem; }
-.pay-head h2 { font-size: 1.3rem; }
-.pay-head p { color: var(--muted); font-size: .9rem; margin-top: .25rem; }
+.pay-head h2 { font-size: 1.6rem; letter-spacing: -.5px; }
+.pay-head p { color: var(--muted); font-size: .88rem; margin-top: .3rem; }
+.pay-badge-upi { display: inline-block; font-size: .7rem; font-weight: 800; letter-spacing: .6px;
+  text-transform: uppercase; color: var(--orange); background: var(--orange-soft);
+  border: 1px solid rgba(255,106,0,.3); padding: .3rem .7rem; border-radius: 999px; margin-bottom: .7rem; }
 
-.pay-timer { text-align: center; font-size: .85rem; color: var(--muted); background: var(--bg-soft);
-  border: 1px solid var(--line); border-radius: 999px; padding: .45rem .9rem; margin-bottom: 1rem; }
-.pay-timer strong { color: var(--orange); }
+.pay-timer { text-align: center; font-size: .82rem; color: var(--muted); background: var(--bg-soft);
+  border: 1px solid var(--line); border-radius: 999px; padding: .45rem .9rem; margin-bottom: 1.1rem; }
+.pay-timer strong { color: var(--orange); font-variant-numeric: tabular-nums; }
 .pay-timer.expired { color: #ffb877; }
 
-.qr-box { background: #fff; border-radius: 16px; padding: 14px; width: max-content; max-width: 100%;
-  margin: 0 auto; box-shadow: var(--shadow-sm); }
-.qr-img { display: block; width: 240px; height: 240px; max-width: 70vw; max-height: 70vw; border-radius: 6px; }
-.qr-canvas { display: flex; align-items: center; justify-content: center; min-height: 240px; }
-.qr-canvas canvas { display: block; width: 240px !important; height: 240px !important; max-width: 70vw; max-height: 70vw; border-radius: 6px; }
+/* QR card — the focal point, kept crisp on a white surface */
+.qr-card { background: linear-gradient(180deg, #1b1b1b, #141414); border: 1px solid var(--line);
+  border-radius: 18px; padding: 1.1rem 1.1rem 1rem; text-align: center; box-shadow: var(--shadow-sm); }
+.qr-card-top { font-size: .78rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: .8rem; }
+.qr-box { background: #fff; border-radius: 14px; padding: 14px; width: max-content; max-width: 100%;
+  margin: 0 auto; box-shadow: 0 8px 22px rgba(0,0,0,.35); }
+.qr-img { display: block; width: 230px; height: 230px; max-width: 64vw; max-height: 64vw; border-radius: 6px; }
+.qr-canvas { display: flex; align-items: center; justify-content: center; min-height: 230px; }
+.qr-canvas canvas { display: block; width: 230px !important; height: 230px !important; max-width: 64vw; max-height: 64vw; border-radius: 6px; }
 .qr-fallback { color: #b03d00; font-size: .85rem; font-weight: 600; padding: 1.5rem; text-align: center; }
-.qr-actions { display: flex; gap: .5rem; justify-content: center; margin: .9rem 0 1.1rem; flex-wrap: wrap; }
-.qr-actions .btn { flex: 1; min-width: 130px; }
+.qr-apps { display: flex; flex-wrap: wrap; justify-content: center; gap: .35rem; margin-top: .9rem; }
+.qr-apps span { font-size: .68rem; font-weight: 700; color: var(--muted); background: var(--bg-soft);
+  border: 1px solid var(--line); border-radius: 6px; padding: .22rem .5rem; }
+.qr-actions { display: flex; gap: .5rem; justify-content: center; margin-top: .9rem; flex-wrap: wrap; }
+.qr-actions .btn { flex: 1; min-width: 120px; }
 .pay-open-app { display: none; } /* shown on touch devices (opens UPI app) */
 
+/* Divider */
+.pay-or { display: flex; align-items: center; gap: .8rem; margin: 1.2rem 0; color: var(--muted-2);
+  font-size: .76rem; text-transform: uppercase; letter-spacing: .6px; }
+.pay-or::before, .pay-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
 .upi-id-row { display: flex; align-items: center; justify-content: space-between; gap: .8rem;
-  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px; padding: .7rem .9rem; }
-.upi-id-label { display: block; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-.upi-id-row strong { font-size: 1.02rem; word-break: break-all; }
-.pay-amt-row { display: flex; align-items: center; justify-content: space-between; margin-top: .9rem;
-  padding-top: .9rem; border-top: 1px dashed var(--line); }
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px; padding: .75rem .95rem; }
+.upi-id-meta { min-width: 0; }
+.upi-id-label { display: block; font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.upi-id-row strong { font-size: 1.05rem; word-break: break-all; }
+.upi-id-row .btn { flex-shrink: 0; }
+
+/* Amount + order summary card */
+.pay-summary { margin-top: 1rem; background: var(--bg-soft); border: 1px solid var(--line);
+  border-radius: 12px; padding: .5rem .95rem; }
+.pay-amt-row { display: flex; align-items: center; justify-content: space-between; padding: .55rem 0; }
 .pay-amt-row span { color: var(--muted); font-size: .9rem; }
-.pay-amt-row strong { color: var(--orange); font-size: 1.3rem; }
-.pay-note { font-size: .8rem; color: var(--muted); line-height: 1.55; margin: .9rem 0 1.1rem; }
-.pay-note strong { color: var(--ink); }
+.pay-amt-row strong { color: var(--orange); font-size: 1.45rem; font-weight: 800; }
+.pay-order-row { display: flex; align-items: center; justify-content: space-between;
+  padding: .55rem 0; border-top: 1px dashed var(--line); }
+.pay-order-row span { color: var(--muted); font-size: .82rem; }
+.pay-order-row code { font-size: .82rem; color: var(--ink); font-weight: 700; letter-spacing: .3px; word-break: break-all; }
+.pay-note { font-size: .79rem; color: var(--muted); line-height: 1.55; margin: 1rem 0 1.1rem;
+  background: rgba(255,106,0,.07); border: 1px solid rgba(255,106,0,.22); border-radius: 10px; padding: .7rem .85rem; }
+.pay-note strong { color: #ffb877; }
 
 /* Screenshot upload */
 .proof-drop { display: block; border: 2px dashed var(--line); border-radius: 14px; padding: 1.4rem 1rem;

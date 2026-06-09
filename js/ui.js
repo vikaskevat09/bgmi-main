@@ -112,11 +112,10 @@
   // If the admin uploaded a brand logo, show it in the header (and footer) in
   // place of the default SVG mark.
   function renderSiteLogo() {
-    const logo = (window.SiteConfig && window.SiteConfig.siteLogo) || 'assets/brand/brandlogo.webp';
+    const logo = (window.SiteConfig && window.SiteConfig.siteLogo) || 'assets/brand/brand.jpeg';
     const url = window.assetUrl ? window.assetUrl(logo) : logo;
-    const fallback = window.assetUrl ? window.assetUrl('assets/brand/brandlogo.png') : 'assets/brand/brandlogo.png';
     document.querySelectorAll('.brand .brand-mark').forEach(mark => {
-      mark.innerHTML = `<img src="${url}" alt="TopUpWorld logo" onerror="this.onerror=null;this.src='${fallback}'" />`;
+      mark.innerHTML = `<img src="${url}" alt="TopUpWorld logo" />`;
     });
   }
 
