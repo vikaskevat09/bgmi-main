@@ -349,6 +349,10 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 .denom-amt .cur-ic { width: 20px; height: 20px; margin: 0; vertical-align: middle; }
 .denom-price { display: inline-block; color: var(--orange); font-size: 1.05rem; font-weight: 800; }
 .denom.is-active::after { content: '✓'; position: absolute; bottom: .5rem; right: .6rem; color: var(--orange); font-weight: 800; font-size: .8rem; }
+/* Card breathing room on mobile */
+@media (max-width: 700px) {
+  .cta-band, .panel, .gd2-card, .gd2-sum-card, .login-card { margin: 20px 20px 20px 20px; }
+}
 .pay-methods { display: flex; flex-wrap: wrap; gap: .5rem; }
 .pay-method { border: 1.5px solid var(--line); background: #1b1b1b; border-radius: 999px;
   padding: .6rem 1.2rem; cursor: pointer; font-size: .9rem; transition: .2s; color: var(--ink); }
