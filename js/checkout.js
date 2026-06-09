@@ -39,25 +39,6 @@
           <p class="field-hint">We'll send your order confirmation here.</p>
         </div>
 
-        <div class="panel co-section">
-          <div class="panel-title"><span class="step-badge">2</span> Delivery</div>
-          <div class="deliver-rows">
-            ${items.map(it => `
-              <div class="deliver-row">
-                ${window.coverHTML(it.game.id, '')}
-                <div>
-                  <div class="mi-name">${it.game.name}</div>
-                  <div class="mi-sub">${window.currencyIconHTML(it.game.id)}${it.denom.label} × ${it.qty}</div>
-                </div>
-                <div class="deliver-id">
-                  <span>${it.game.idLabel || 'ID'}</span>
-                  <strong>${it.playerId || '—'}${it.serverId ? ' (' + it.serverId + ')' : ''}</strong>
-                  ${it.username ? `<em>${it.username}</em>` : ''}
-                </div>
-              </div>`).join('')}
-          </div>
-          <p class="field-hint">⚡ Currency is delivered to these IDs instantly after payment.</p>
-        </div>
       </div>
 
       <aside class="summary-card">
@@ -313,7 +294,6 @@
             <div class="qr-apps" aria-hidden="true"><span>GPay</span><span>PhonePe</span><span>Paytm</span><span>BHIM</span></div>
             <div class="qr-actions">
               <button class="btn btn-ghost btn-sm" id="qrDownload">⬇ Save QR</button>
-              <a class="btn btn-ghost btn-sm pay-open-app" href="${order.upiUri}">Open UPI app</a>
             </div>
           </div>
 

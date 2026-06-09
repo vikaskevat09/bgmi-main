@@ -154,7 +154,11 @@
   search.addEventListener('input', () => {
     const q = search.value.trim().toLowerCase();
     if (!q) { results.classList.remove('open'); return; }
-    const matches = C.games.filter(g => g.name.toLowerCase().includes(q)).slice(0, 6);
+    const matches = C.games.filter(g =>
+      g.name.toLowerCase().includes(q) ||
+      (g.publisher && g.publisher.toLowerCase().includes(q)) ||
+      (g.currency && g.currency.toLowerCase().includes(q))
+    ).slice(0, 6);
     results.innerHTML = matches.length
       ? matches.map(g => `
           <a href="/game?id=${g.id}">
