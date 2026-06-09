@@ -1,0 +1,9 @@
+# Vercel hosts only the static frontend.
+# The Node backend (server/) is deployed separately (e.g. Render).
+server/
+tools/
+node_modules/
+.vscode/
+DEPLOY.md
+README.md
+*.zip

@@ -17,5 +17,8 @@ assets/hero/
 .DS_Store
 Thumbs.db
 
+# Local deploy bundle (don't commit)
+*.zip
+
 # Secrets / env dumps
 render.env.txt
