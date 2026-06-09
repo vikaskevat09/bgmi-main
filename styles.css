@@ -530,6 +530,8 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 .qr-box { background: #fff; border-radius: 16px; padding: 14px; width: max-content; max-width: 100%;
   margin: 0 auto; box-shadow: var(--shadow-sm); }
 .qr-img { display: block; width: 240px; height: 240px; max-width: 70vw; max-height: 70vw; border-radius: 6px; }
+.qr-canvas { display: flex; align-items: center; justify-content: center; min-height: 240px; }
+.qr-canvas canvas { display: block; width: 240px !important; height: 240px !important; max-width: 70vw; max-height: 70vw; border-radius: 6px; }
 .qr-fallback { color: #b03d00; font-size: .85rem; font-weight: 600; padding: 1.5rem; text-align: center; }
 .qr-actions { display: flex; gap: .5rem; justify-content: center; margin: .9rem 0 1.1rem; flex-wrap: wrap; }
 .qr-actions .btn { flex: 1; min-width: 130px; }

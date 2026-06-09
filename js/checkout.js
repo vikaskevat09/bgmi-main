@@ -289,7 +289,7 @@
   function openPaymentModal(order, customer) {
     closePaymentModal();
     const amt = window.inr(order.amount);
-    const qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=460x460&margin=12&data='
+    const qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data='
       + encodeURIComponent(order.upiUri);
 
     const wrap = document.createElement('div');
@@ -308,7 +308,7 @@
           <div class="pay-timer" id="payTimer">⏱️ Complete payment within <strong>10:00</strong></div>
 
           <div class="qr-box">
-            <img id="qrImg" class="qr-img" src="${qrSrc}" alt="UPI QR code" width="240" height="240" />
+            <div id="qrBox" class="qr-canvas"></div>
             <div class="qr-fallback" id="qrFallback" style="display:none">QR couldn't load — use the UPI ID below 👇</div>
           </div>
 
@@ -376,11 +376,25 @@
 
     const $$ = id => wrap.querySelector('#' + id);
 
-    // QR load fallback
-    $$('qrImg').addEventListener('error', () => {
-      $$('qrImg').style.display = 'none';
-      $$('qrFallback').style.display = 'block';
-    });
+    // Render the QR instantly client-side; fall back to an image API only if the lib is missing.
+    (function renderQR() {
+      const box = $$('qrBox');
+      if (window.QRCode) {
+        try {
+          new QRCode(box, {
+            text: order.upiUri, width: 240, height: 240,
+            colorDark: '#000000', colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M,
+          });
+          return;
+        } catch (e) { /* fall through to image */ }
+      }
+      const img = document.createElement('img');
+      img.className = 'qr-img'; img.width = 240; img.height = 240; img.alt = 'UPI QR code';
+      img.src = qrSrc;
+      img.addEventListener('error', () => { box.style.display = 'none'; $$('qrFallback').style.display = 'block'; });
+      box.appendChild(img);
+    })();
 
     // Countdown timer (10 min)
     let left = 10 * 60;
@@ -403,16 +417,25 @@
       catch { window.toast('Copy failed — long-press to copy.', 'err'); }
     });
 
-    // Download QR as PNG
+    // Download QR as PNG (from the rendered canvas; falls back to the image API)
     $$('qrDownload').addEventListener('click', async () => {
+      const box = $$('qrBox');
+      const canvas = box.querySelector('canvas');
+      const imgEl = box.querySelector('img');
+      let dataUrl = null;
+      if (canvas) { try { dataUrl = canvas.toDataURL('image/png'); } catch {} }
+      if (!dataUrl && imgEl && /^data:/.test(imgEl.src)) dataUrl = imgEl.src;
       try {
-        const r = await fetch(qrSrc);
-        const blob = await r.blob();
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
+        if (dataUrl) {
+          a.href = dataUrl;
+        } else {
+          const r = await fetch(qrSrc);
+          a.href = URL.createObjectURL(await r.blob());
+        }
         a.download = 'TopUpWorld-UPI-' + order.orderId + '.png';
         document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        if (a.href.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(a.href), 4000);
       } catch { window.toast('⚠️ Could not download QR.', 'err'); }
     });
 
