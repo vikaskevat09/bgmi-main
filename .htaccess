@@ -1,0 +1,23 @@
+# ============================================================
+# TopUpWorld — clean URLs (Apache / Hostinger)
+# Turns /about.html into /about (and serves the right file).
+# ============================================================
+Options -MultiViews
+RewriteEngine On
+
+# 1) /index or /index.html  →  /
+RewriteCond %{THE_REQUEST} \s/+index(\.html)?[\s?] [NC]
+RewriteRule ^ / [R=301,L]
+
+# 2) /page.html  →  /page   (301 redirect, keeps the query string)
+RewriteCond %{THE_REQUEST} \s/+([^.\s?]+)\.html[\s?] [NC]
+RewriteRule ^ /%1 [R=301,L]
+
+# 3) Internally serve /page from page.html when it exists
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{DOCUMENT_ROOT}/$1.html -f
+RewriteRule ^(.+?)/?$ $1.html [L]
+
+# Optional: a friendly 404 page (create 404.html if you want one)
+# ErrorDocument 404 /404.html

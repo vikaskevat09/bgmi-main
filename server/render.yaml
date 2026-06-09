@@ -1,0 +1,37 @@
+# Render Blueprint for the TopUpWorld backend.
+# In Render: New → Blueprint → connect your repo (root = this "server" folder),
+# OR create a Web Service manually and use the settings below.
+services:
+  - type: web
+    name: topupworld-api
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/config
+    envVars:
+      - key: UPI_ID
+        sync: false
+      - key: UPI_NAME
+        value: TopUpWorld
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: COOKIE_CROSS_SITE
+        value: "true"
+      - key: CORS_ORIGIN
+        sync: false
+      - key: RAPIDAPI_KEY
+        sync: false
+      - key: RAPIDAPI_HOST
+        sync: false
+      - key: RAPIDAPI_URL_TEMPLATE
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false

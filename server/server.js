@@ -1,0 +1,698 @@
+/**
+ * TopUpWorld backend
+ * -----------------
+ * - Serves the static site (the project root)
+ * - Manual UPI payment flow (no third-party gateway):
+ *     POST /api/create-order   → reserves an order, returns the UPI details + amount
+ *     POST /api/submit-payment → customer uploads the payment screenshot (+ UTR)
+ *     GET  /api/order/:id       → polls order status / delivery code (return page)
+ *     Admin reviews the proof and approves, attaching a delivery code that the
+ *     customer then sees on their order page.
+ *
+ * The order amount is recomputed here from the price book so the client can
+ * never set its own price.
+ */
+import express from 'express';
+import cors from 'cors';
+import crypto from 'crypto';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import 'dotenv/config';
+import fs from 'fs';
+import { priceCart, VERIFY_SLUGS, VERIFY_NEEDS_SERVER } from './catalog.js';
+import * as store from './store.js';
+import * as admin from './adminconfig.js';
+import { cloudEnabled, uploadImage, destroyImage } from './cloud.js';
+import {
+  hashPassword, verifyPassword, createSessionToken, verifySessionToken,
+  setSessionCookie, clearSessionCookie, parseCookies, SESSION_COOKIE, sessionCookieAttrs,
+} from './auth.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.join(__dirname, '..');
+
+const {
+  UPI_ID = 'topupworld@airtel',          // your UPI VPA — customers pay here
+  UPI_NAME = 'TopUpWorld',               // shown in the UPI app
+  PORT = 8080,
+  CORS_ORIGIN = '*',
+  ADMIN_PASSWORD = '',
+  RAPIDAPI_KEY = '',
+  RAPIDAPI_HOST = '',
+  RAPIDAPI_URL_TEMPLATE = '',
+  RAPIDAPI_DEFAULT_REGION = '',
+} = process.env;
+
+// Where customer payment screenshots are stored (kept private; served to admin only).
+const PROOF_DIR = path.join(__dirname, 'data', 'proofs');
+fs.mkdirSync(PROOF_DIR, { recursive: true });
+
+const app = express();
+// CORS — allow the configured frontend origin(s) with credentials (cookies).
+// CORS_ORIGIN can be "*" (dev) or a comma-separated list of allowed origins
+// e.g. "https://topupworld.com,https://www.topupworld.com"
+const ALLOWED = CORS_ORIGIN.split(',').map(s => s.trim()).filter(Boolean);
+app.use(cors({
+  origin: function (origin, cb) {
+    // allow same-origin / curl (no origin), and "*" dev mode
+    if (!origin || ALLOWED.includes('*')) return cb(null, true);
+    return cb(null, ALLOWED.includes(origin) ? origin : false);
+  },
+  credentials: true,
+}));
+
+// Capture the raw body for webhook signature verification.
+app.use(express.json({
+  limit: '8mb', // allow base64 logo uploads
+  verify: (req, _res, buf) => { req.rawBody = buf; },
+}));
+
+// Resolve the logged-in user (if any) from the session cookie.
+app.use((req, _res, next) => {
+  try {
+    const token = parseCookies(req)[SESSION_COOKIE];
+    const userId = token ? verifySessionToken(token) : null;
+    req.user = userId ? store.getUserById(userId) : null;
+  } catch { req.user = null; }
+  next();
+});
+
+function requireAuth(req, res, next) {
+  if (!req.user) return res.status(401).json({ message: 'Please sign in.' });
+  next();
+}
+
+/* ---- Admin auth (separate cookie, password from .env) ---- */
+const ADMIN_COOKIE = 'tuz_admin';
+function requireAdmin(req, res, next) {
+  const token = parseCookies(req)[ADMIN_COOKIE];
+  if (token && verifySessionToken(token) === 'ADMIN') return next();
+  return res.status(401).json({ message: 'Admin authentication required.' });
+}
+
+app.post('/api/admin/login', (req, res) => {
+  const { password } = req.body || {};
+  if (!ADMIN_PASSWORD) return res.status(500).json({ message: 'Admin password not configured on server.' });
+  if (String(password) !== String(ADMIN_PASSWORD)) {
+    return res.status(401).json({ message: 'Incorrect admin password.' });
+  }
+  const token = createSessionToken('ADMIN');
+  res.setHeader('Set-Cookie',
+    `${ADMIN_COOKIE}=${token}; HttpOnly; ${sessionCookieAttrs()}; Path=/; Max-Age=${60 * 60 * 12}`);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/logout', (req, res) => {
+  res.setHeader('Set-Cookie', `${ADMIN_COOKIE}=; HttpOnly; ${sessionCookieAttrs()}; Path=/; Max-Age=0`);
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/check', (req, res) => {
+  const token = parseCookies(req)[ADMIN_COOKIE];
+  res.json({ admin: !!(token && verifySessionToken(token) === 'ADMIN') });
+});
+
+/* ---- Public site config (hero, price overrides, logos) ---- */
+app.get('/api/config', (_req, res) => {
+  res.json(admin.publicConfig());
+});
+
+/* ---- Admin: prices + labels (quantity offered) ---- */
+app.get('/api/admin/prices', requireAdmin, (_req, res) => {
+  res.json({ overrides: admin.getConfig().priceOverrides, labels: admin.getConfig().labelOverrides });
+});
+app.post('/api/admin/prices', requireAdmin, (req, res) => {
+  try { res.json({ overrides: admin.setPrices(req.body.prices || {}) }); }
+  catch (e) { res.status(400).json({ message: e.message }); }
+});
+/* Update a single pack's price and/or label (quantity). */
+app.post('/api/admin/pack/:sku', requireAdmin, (req, res) => {
+  try {
+    const out = admin.setPack(req.params.sku, { price: req.body.price, label: req.body.label });
+    res.json(out);
+  } catch (e) { res.status(400).json({ message: e.message }); }
+});
+app.delete('/api/admin/pack/:sku', requireAdmin, (req, res) => {
+  res.json(admin.clearPack(req.params.sku));
+});
+app.delete('/api/admin/prices/:sku', requireAdmin, (req, res) => {
+  res.json({ overrides: admin.clearPrice(req.params.sku) });
+});
+
+/* ---- Admin: hero (uploaded images) ---- */
+app.get('/api/admin/hero', requireAdmin, (_req, res) => res.json({ hero: admin.getHero() }));
+
+/* Upload a hero image (base64) → Cloudinary if configured, else local. */
+app.post('/api/admin/hero', requireAdmin, async (req, res) => {
+  try {
+    const { dataUrl } = req.body || {};
+    const m = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec(dataUrl || '');
+    if (!m) return res.status(400).json({ message: 'Provide a PNG/JPG/WEBP image.' });
+    let ext = m[1].toLowerCase(); if (ext === 'jpeg') ext = 'jpg';
+    const buf = Buffer.from(m[2], 'base64');
+    if (buf.length > 6 * 1024 * 1024) return res.status(400).json({ message: 'Image too large (max 6MB).' });
+
+    const id = 'h_' + Date.now().toString(36);
+    let image;
+    if (cloudEnabled()) {
+      image = await uploadImage(dataUrl, `topupworld/hero/${id}`);
+    } else {
+      const dir = path.join(ROOT, 'assets', 'hero');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, `${id}.${ext}`), buf);
+      image = `assets/hero/${id}.${ext}`;
+    }
+    const slide = { id, image };
+    admin.getConfig().hero.push(slide);
+    admin.reorderHero(admin.getConfig().hero.map(h => h.id)); // triggers save
+    res.json({ hero: admin.getHero(), added: slide });
+  } catch (e) {
+    console.error('hero upload error:', e);
+    res.status(500).json({ message: e.message || 'Upload failed.' });
+  }
+});
+
+app.delete('/api/admin/hero/:id', requireAdmin, async (req, res) => {
+  const slide = admin.getHeroSlide(req.params.id);
+  if (slide && slide.image) {
+    if (/^https?:\/\//i.test(slide.image)) { await destroyImage(`topupworld/hero/${slide.id}`); }
+    else { const p = path.join(ROOT, slide.image); if (fs.existsSync(p)) { try { fs.unlinkSync(p); } catch {} } }
+  }
+  res.json({ hero: admin.removeHero(req.params.id) });
+});
+app.post('/api/admin/hero/reorder', requireAdmin, (req, res) => {
+  res.json({ hero: admin.reorderHero(req.body.ids || []) });
+});
+
+/* ---- Admin: social media links ---- */
+app.get('/api/admin/socials', requireAdmin, (_req, res) => res.json({ socials: admin.getConfig().socials || {} }));
+app.post('/api/admin/socials', requireAdmin, (req, res) => {
+  res.json({ socials: admin.setSocials(req.body.socials || {}) });
+});
+
+/* ---- Admin: logo upload / remove ----
+ * Cloudinary (if configured) keeps it permanent; else local file (dev). */
+app.post('/api/admin/logo/:gameId', requireAdmin, async (req, res) => {
+  try {
+    const gameId = String(req.params.gameId).replace(/[^a-z0-9-]/gi, '');
+    const { dataUrl } = req.body || {};
+    const m = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec(dataUrl || '');
+    if (!gameId || !m) return res.status(400).json({ message: 'Provide a PNG/JPG/WEBP image.' });
+    const buf = Buffer.from(m[2], 'base64');
+    if (buf.length > 5 * 1024 * 1024) return res.status(400).json({ message: 'Image too large (max 5MB).' });
+
+    if (cloudEnabled()) {
+      const url = await uploadImage(dataUrl, `topupworld/games/${gameId}`);
+      admin.setLogo(gameId, url);
+      return res.json({ ok: true, file: url });
+    }
+    let ext = m[1].toLowerCase(); if (ext === 'jpeg') ext = 'jpg';
+    const dir = path.join(ROOT, 'assets', 'games');
+    fs.mkdirSync(dir, { recursive: true });
+    for (const e of ['png', 'jpg', 'webp']) {
+      const p = path.join(dir, `${gameId}.${e}`);
+      if (e !== ext && fs.existsSync(p)) { try { fs.unlinkSync(p); } catch {} }
+    }
+    fs.writeFileSync(path.join(dir, `${gameId}.${ext}`), buf);
+    admin.setLogo(gameId, `${gameId}.${ext}`);
+    res.json({ ok: true, file: `${gameId}.${ext}` });
+  } catch (e) {
+    console.error('logo upload error:', e);
+    res.status(500).json({ message: e.message || 'Upload failed.' });
+  }
+});
+
+app.delete('/api/admin/logo/:gameId', requireAdmin, async (req, res) => {
+  const gameId = String(req.params.gameId).replace(/[^a-z0-9-]/gi, '');
+  if (cloudEnabled()) { await destroyImage(`topupworld/games/${gameId}`); }
+  const dir = path.join(ROOT, 'assets', 'games');
+  for (const e of ['png', 'jpg', 'webp']) {
+    const p = path.join(dir, `${gameId}.${e}`);
+    if (fs.existsSync(p)) { try { fs.unlinkSync(p); } catch {} }
+  }
+  admin.clearLogo(gameId);
+  res.json({ ok: true });
+});
+
+/* ---- Admin: site (brand) logo upload / remove ---- */
+app.post('/api/admin/site-logo', requireAdmin, async (req, res) => {
+  try {
+    const { dataUrl } = req.body || {};
+    const m = /^data:image\/(png|webp|jpe?g|svg\+xml);base64,(.+)$/i.exec(dataUrl || '');
+    if (!m) return res.status(400).json({ message: 'Provide a PNG/WEBP/SVG image.' });
+    let ext = m[1].toLowerCase(); if (ext === 'jpeg') ext = 'jpg'; if (ext === 'svg+xml') ext = 'svg';
+    const buf = Buffer.from(m[2], 'base64');
+    if (buf.length > 2 * 1024 * 1024) return res.status(400).json({ message: 'Logo too large (max 2MB).' });
+
+    if (cloudEnabled()) {
+      const url = await uploadImage(dataUrl, 'topupworld/brand/logo');
+      admin.setSiteLogo(url);
+      return res.json({ ok: true, file: url });
+    }
+    const dir = path.join(ROOT, 'assets', 'brand');
+    fs.mkdirSync(dir, { recursive: true });
+    for (const e of ['png', 'jpg', 'webp', 'svg']) {
+      const p = path.join(dir, `logo.${e}`);
+      if (e !== ext && fs.existsSync(p)) { try { fs.unlinkSync(p); } catch {} }
+    }
+    const filename = `assets/brand/logo.${ext}?v=${Date.now()}`;
+    fs.writeFileSync(path.join(dir, `logo.${ext}`), buf);
+    admin.setSiteLogo(filename);
+    res.json({ ok: true, file: filename });
+  } catch (e) {
+    console.error('site-logo upload error:', e);
+    res.status(500).json({ message: e.message || 'Upload failed.' });
+  }
+});
+
+app.delete('/api/admin/site-logo', requireAdmin, async (req, res) => {
+  if (cloudEnabled()) { await destroyImage('topupworld/brand/logo'); }
+  const dir = path.join(ROOT, 'assets', 'brand');
+  for (const e of ['png', 'jpg', 'webp', 'svg']) {
+    const p = path.join(dir, `logo.${e}`);
+    if (fs.existsSync(p)) { try { fs.unlinkSync(p); } catch {} }
+  }
+  admin.clearSiteLogo();
+  res.json({ ok: true });
+});
+
+/* ---- In-memory order store (swap for a real DB in production) ---- */
+const ORDERS = new Map();
+
+/* ============================================================
+   AUTH ROUTES — email + password (scrypt hashed), session cookie
+   ============================================================ */
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/* Sign up */
+app.post('/api/auth/signup', (req, res) => {
+  try {
+    const { name, email, password } = req.body || {};
+    if (!name || !String(name).trim()) return res.status(400).json({ message: 'Please enter your name.' });
+    if (!EMAIL_RE.test(email || '')) return res.status(400).json({ message: 'Enter a valid email.' });
+    if (!password || String(password).length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+    }
+    if (store.getUserByEmail(email)) {
+      return res.status(409).json({ message: 'An account with this email already exists.' });
+    }
+
+    const passHash = hashPassword(password); // plaintext never stored
+    const user = store.createUser({ email, name, passHash });
+
+    const token = createSessionToken(user.id);
+    setSessionCookie(res, token);
+    return res.json({ user: store.publicUser(user) });
+  } catch (e) {
+    console.error('signup error:', e);
+    return res.status(500).json({ message: 'Could not create account.' });
+  }
+});
+
+/* Log in */
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    const user = store.getUserByEmail(email);
+    // Same generic message whether email or password is wrong (avoids leaking which).
+    if (!user || !verifyPassword(password || '', user.passHash)) {
+      return res.status(401).json({ message: 'Invalid email or password.' });
+    }
+    const token = createSessionToken(user.id);
+    setSessionCookie(res, token);
+    return res.json({ user: store.publicUser(user) });
+  } catch (e) {
+    console.error('login error:', e);
+    return res.status(500).json({ message: 'Could not sign in.' });
+  }
+});
+
+/* Log out */
+app.post('/api/auth/logout', (req, res) => {
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+/* Who am I */
+app.get('/api/auth/me', (req, res) => {
+  res.json({ user: store.publicUser(req.user) });
+});
+
+/* ---- Saved game IDs ---- */
+app.get('/api/saved-ids', requireAuth, (req, res) => {
+  res.json({ savedIds: req.user.savedIds || [] });
+});
+
+app.post('/api/saved-ids', requireAuth, (req, res) => {
+  const { game, playerId, serverId, username } = req.body || {};
+  if (!game || !playerId) return res.status(400).json({ message: 'Missing game or ID.' });
+  const savedIds = store.addSavedId(req.user.id, {
+    game: String(game).slice(0, 40),
+    playerId: String(playerId).slice(0, 64),
+    serverId: String(serverId || '').slice(0, 64),
+    username: String(username || '').slice(0, 64),
+  });
+  res.json({ savedIds });
+});
+
+app.delete('/api/saved-ids/:index', requireAuth, (req, res) => {
+  const savedIds = store.removeSavedId(req.user.id, parseInt(req.params.index, 10));
+  res.json({ savedIds });
+});
+
+/* ---- Order history ---- */
+app.get('/api/my-orders', requireAuth, (req, res) => {
+  const orders = store.getOrdersByUser(req.user.id).map(o => ({
+    orderId: o.orderId, status: o.status, amount: o.amount,
+    items: o.lines, createdAt: o.createdAt,
+  }));
+  res.json({ orders });
+});
+
+
+/* ---- Coupon / price preview (lets the checkout show an accurate total) ---- */
+app.post('/api/price-cart', (req, res) => {
+  try {
+    const { items, coupon } = req.body || {};
+    if (!Array.isArray(items) || !items.length) {
+      return res.status(400).json({ message: 'Cart is empty.' });
+    }
+    const priced = priceCart(items, admin.priceFor, coupon);
+    res.json({
+      subtotal: priced.subtotal,
+      discount: priced.discount,
+      coupon: priced.coupon,
+      couponValid: priced.couponValid,
+      couponMessage: priced.couponMessage,
+      fee: priced.fee,
+      total: priced.total,
+    });
+  } catch (e) {
+    res.status(400).json({ message: e.message || 'Could not price cart.' });
+  }
+});
+
+/* ============================================================
+   MANUAL UPI PAYMENT FLOW (no third-party gateway)
+   ============================================================ */
+
+/* Public: UPI details the checkout shows on its QR / pay screen. */
+app.get('/api/payment-info', (_req, res) => {
+  res.json({ upiId: UPI_ID, upiName: UPI_NAME });
+});
+
+function buildUpiUri(pa, pn, amount, tn) {
+  const p = new URLSearchParams({ pa, pn, am: Number(amount).toFixed(2), cu: 'INR', tn: 'Order ' + tn });
+  return 'upi://pay?' + p.toString();
+}
+
+/* ---- Create order: reserve it and return the UPI payment details ---- */
+app.post('/api/create-order', (req, res) => {
+  try {
+    const { items, customer, coupon } = req.body || {};
+    if (!Array.isArray(items) || !items.length) return res.status(400).json({ message: 'Cart is empty.' });
+    if (!customer || !customer.name || !customer.phone || !customer.email) {
+      return res.status(400).json({ message: 'Missing customer details.' });
+    }
+    // Authoritative pricing — ignores any amount the client might send.
+    const priced = priceCart(items, admin.priceFor, coupon);
+    if (priced.total <= 0) return res.status(400).json({ message: 'Invalid order total.' });
+
+    const orderId = 'TUW' + Date.now().toString(36).toUpperCase() + crypto.randomBytes(2).toString('hex').toUpperCase();
+    const order = {
+      orderId,
+      userId: req.user ? req.user.id : null,
+      status: 'AWAITING_PAYMENT',
+      amount: priced.total,
+      discount: priced.discount,
+      coupon: priced.coupon,
+      lines: priced.lines,
+      customer,
+      createdAt: Date.now(),
+    };
+    ORDERS.set(orderId, order);
+    store.saveOrder(order);
+
+    res.json({
+      orderId,
+      amount: priced.total,
+      upiId: UPI_ID,
+      upiName: UPI_NAME,
+      upiUri: buildUpiUri(UPI_ID, UPI_NAME, priced.total, orderId),
+    });
+  } catch (e) {
+    console.error('create-order error:', e);
+    res.status(500).json({ message: e.message || 'Could not create order.' });
+  }
+});
+
+/* ---- Submit payment proof (screenshot + optional UTR / reference) ---- */
+app.post('/api/submit-payment', (req, res) => {
+  try {
+    const { orderId, screenshot, utr } = req.body || {};
+    const order = ORDERS.get(orderId) || store.getOrder(orderId);
+    if (!order) return res.status(404).json({ message: 'Order not found.' });
+
+    const m = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec(screenshot || '');
+    if (!m) return res.status(400).json({ message: 'Please attach a valid payment screenshot (PNG/JPG/WEBP).' });
+    let ext = m[1].toLowerCase(); if (ext === 'jpeg') ext = 'jpg';
+    const buf = Buffer.from(m[2], 'base64');
+    if (buf.length > 6 * 1024 * 1024) return res.status(400).json({ message: 'Screenshot too large (max 6MB).' });
+
+    const proofFile = `${orderId}.${ext}`;
+    fs.writeFileSync(path.join(PROOF_DIR, proofFile), buf);
+
+    const patch = {
+      status: 'AWAITING_APPROVAL',
+      proofFile,
+      utr: String(utr || '').slice(0, 40),
+      submittedAt: Date.now(),
+    };
+    Object.assign(order, patch);
+    ORDERS.set(orderId, order);
+    store.updateOrder(orderId, patch);
+
+    console.log(`🧾 Payment proof received for ${orderId} (${order.customer?.email}). Awaiting admin approval.`);
+    res.json({ ok: true, orderId, status: 'AWAITING_APPROVAL' });
+  } catch (e) {
+    console.error('submit-payment error:', e);
+    res.status(500).json({ message: e.message || 'Could not submit payment.' });
+  }
+});
+
+/* ---- Order status (return page polls this) ---- */
+app.get('/api/order/:id', (req, res) => {
+  const order = ORDERS.get(req.params.id) || store.getOrder(req.params.id);
+  if (!order) return res.status(404).json({ message: 'Order not found.' });
+  res.json({
+    order_id: order.orderId,
+    status: order.status,
+    amount: order.amount,
+    deliveryCode: order.status === 'DELIVERED' ? (order.deliveryCode || '') : '',
+    rejectReason: order.status === 'REJECTED' ? (order.rejectReason || '') : '',
+  });
+});
+
+/* ============================================================
+   ADMIN: orders review + manual approval
+   ============================================================ */
+app.get('/api/admin/orders', requireAdmin, (_req, res) => {
+  const orders = store.getAllOrders().map(o => ({
+    orderId: o.orderId, status: o.status, amount: o.amount, discount: o.discount, coupon: o.coupon,
+    customer: o.customer, lines: o.lines, utr: o.utr || '', proof: !!o.proofFile,
+    deliveryCode: o.deliveryCode || '', rejectReason: o.rejectReason || '',
+    createdAt: o.createdAt, submittedAt: o.submittedAt || null, deliveredAt: o.deliveredAt || null,
+  }));
+  res.json({ orders });
+});
+
+/* Stream a payment screenshot (admin only — proofs are kept private). */
+app.get('/api/admin/proof/:orderId', requireAdmin, (req, res) => {
+  const order = store.getOrder(req.params.orderId);
+  if (!order || !order.proofFile) return res.status(404).send('No proof.');
+  const p = path.join(PROOF_DIR, order.proofFile);
+  if (!fs.existsSync(p)) return res.status(404).send('Proof missing.');
+  const ext = path.extname(p).slice(1).toLowerCase();
+  res.setHeader('Content-Type', ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg');
+  res.setHeader('Cache-Control', 'private, no-store');
+  fs.createReadStream(p).pipe(res);
+});
+
+/* Approve an order — attach the delivery code/details the customer will receive. */
+app.post('/api/admin/orders/:id/approve', requireAdmin, (req, res) => {
+  const order = ORDERS.get(req.params.id) || store.getOrder(req.params.id);
+  if (!order) return res.status(404).json({ message: 'Order not found.' });
+  const code = String((req.body || {}).code || '').trim();
+  if (!code) return res.status(400).json({ message: 'Enter the delivery code / details for the customer.' });
+  const patch = { status: 'DELIVERED', deliveryCode: code, deliveredAt: Date.now(), rejectReason: '' };
+  Object.assign(order, patch);
+  ORDERS.set(order.orderId, order);
+  store.updateOrder(order.orderId, patch);
+  // 🔔 Hook point: also send `code` to order.customer.email / .phone via your
+  // email (SMTP/Resend) or SMS (Twilio/MSG91) provider here.
+  fulfill(order);
+  res.json({ ok: true });
+});
+
+/* Reject an order (unclear / mismatched proof). */
+app.post('/api/admin/orders/:id/reject', requireAdmin, (req, res) => {
+  const order = ORDERS.get(req.params.id) || store.getOrder(req.params.id);
+  if (!order) return res.status(404).json({ message: 'Order not found.' });
+  const reason = String((req.body || {}).reason || 'Payment could not be verified.').slice(0, 200);
+  const patch = { status: 'REJECTED', rejectReason: reason };
+  Object.assign(order, patch);
+  ORDERS.set(order.orderId, order);
+  store.updateOrder(order.orderId, patch);
+  res.json({ ok: true });
+});
+
+/**
+ * Delivery log. The actual code is sent to the customer by the admin (and shown
+ * on the customer's order page). Kept idempotent: only log once.
+ */
+function fulfill(order) {
+  if (order.fulfilled) return;
+  order.fulfilled = true;
+  store.updateOrder(order.orderId, { fulfilled: true });
+  console.log(`✅ Order ${order.orderId} delivered to ${order.customer?.email} / ${order.customer?.phone}. ` +
+    `Code: ${order.deliveryCode} — ` + order.lines.map(l => `${l.qty}× ${l.sku} → ID ${l.playerId}`).join(', '));
+}
+
+/* ---- ID verification (proxied to RapidAPI; key stays server-side) ----
+ * GET /api/verify-id?game=ff&id=1234567890[&region=free-fire]
+ * Returns a normalized shape: { ok, username, id, raw? }
+ *
+ * Expected upstream response (per your provider):
+ *   { "error": false, "status": 200, "msg": "id_found",
+ *     "data": { "id": "...", "username": "SoyBlaze" } }
+ */
+app.get('/api/verify-id', async (req, res) => {
+  try {
+    const id = String(req.query.id || '').trim();
+    const game = String(req.query.game || '').trim();
+    if (!id) return res.status(400).json({ ok: false, message: 'Missing id.' });
+    if (id.length < 2 || id.length > 40) {
+      return res.status(400).json({ ok: false, message: 'Player ID looks invalid.' });
+    }
+
+    // If we have no upstream config, do format-only validation so the UI still works.
+    if (!RAPIDAPI_KEY || !RAPIDAPI_HOST) {
+      return res.json({ ok: true, verified: false, username: null, id,
+        message: 'Format looks valid (live verification not configured).' });
+    }
+
+    const region = String(req.query.region || '').trim()
+      || VERIFY_SLUGS[game]
+      || RAPIDAPI_DEFAULT_REGION;
+
+    const server = String(req.query.server || '').trim();
+
+    // Build the upstream URL. Supports both single-segment providers
+    // (/{slug}/{id}) and games that need a server segment (/{slug}/{id}/{server}),
+    // e.g. Mobile Legends. If a custom URL template is set, honor its
+    // {region}/{id}/{server} placeholders; otherwise build from host + slug.
+    let url;
+    if (RAPIDAPI_URL_TEMPLATE && RAPIDAPI_URL_TEMPLATE.includes('{id}')) {
+      url = RAPIDAPI_URL_TEMPLATE
+        .replace('{region}', encodeURIComponent(region))
+        .replace('{server}', encodeURIComponent(server))
+        .replace('{id}', encodeURIComponent(id));
+      // strip a trailing empty server segment if the template had one
+      url = url.replace(/\/+$/, '');
+    } else {
+      const segs = [encodeURIComponent(region), encodeURIComponent(id)];
+      if (server) segs.push(encodeURIComponent(server));
+      url = `https://${RAPIDAPI_HOST}/${segs.join('/')}`;
+    }
+
+    const upstream = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'x-rapidapi-key': RAPIDAPI_KEY,
+        'x-rapidapi-host': RAPIDAPI_HOST,
+      },
+    });
+
+    const data = await upstream.json().catch(() => ({}));
+
+    const norm = normalizeVerify(data, id);
+    if (norm.verified) {
+      return res.json({ ok: true, verified: true, username: norm.username, id: norm.id, banned: norm.banned, region: norm.region });
+    }
+    return res.json({
+      ok: false, verified: false, username: null, id,
+      message: norm.message || 'Could not verify this ID.',
+    });
+  } catch (e) {
+    console.error('verify-id error:', e);
+    return res.status(502).json({ ok: false, message: 'Verification service unavailable.' });
+  }
+});
+
+/**
+ * Normalizes different providers' responses into one shape.
+ * Supports:
+ *  A) id-game-checker: { error:false, msg:"id_found", data:{ id, username } }
+ *  B) free-fire-info style: { success:true, data:{ id_ff, username, region, server, is_ban } }
+ */
+function normalizeVerify(data, fallbackId) {
+  if (!data || typeof data !== 'object') return { verified: false, message: 'Empty response.' };
+
+  // Shape B — { success, data: { id_ff, username, region, is_ban } }
+  if (data.success === true && data.data && (data.data.id_ff !== undefined || data.data.username !== undefined)) {
+    const d = data.data;
+    const uname = (d.username || '').toString().trim();
+    const banned = String(d.is_ban) === '1' || d.is_ban === true;
+    // Some providers return the record (id present) even when username is blank.
+    const exists = !!(d.id_ff || uname);
+    if (!exists) return { verified: false, message: 'No account found for that ID.' };
+    return {
+      verified: true,
+      username: uname || ('Player ' + (d.id_ff || fallbackId)),
+      id: d.id_ff || fallbackId,
+      region: (d.region || '').toString().trim(),
+      banned,
+    };
+  }
+
+  // Shape A — { error:false, msg:"id_found", data:{ id, username } }
+  if (data.error === false && data.data && data.data.username) {
+    return { verified: true, username: data.data.username, id: data.data.id || fallbackId };
+  }
+
+  // Known "not found" messages
+  const msg = data.msg || data.message || '';
+  if (/not[_ ]?found/i.test(msg)) return { verified: false, message: 'No account found for that ID.' };
+
+  return { verified: false, message: msg || 'Could not verify this ID.' };
+}
+
+/* ---- Clean URLs: redirect *.html → extensionless (and /index → /) ---- */
+app.get(/.*/, (req, res, next) => {
+  if (req.method === 'GET' && /\.html$/i.test(req.path)) {
+    const query = req.originalUrl.slice(req.path.length); // keep ?query
+    let clean = req.path.replace(/\.html$/i, '');
+    if (/\/index$/i.test(clean)) clean = clean.replace(/\/index$/i, '/') || '/';
+    return res.redirect(301, clean + query);
+  }
+  next();
+});
+
+/* ---- Static site (serves /about from about.html via `extensions`) ---- */
+app.use(express.static(ROOT, {
+  extensions: ['html'],
+  setHeaders: (res, filePath) => {
+    // Cache images/fonts aggressively; keep HTML fresh.
+    if (/\.(png|jpe?g|webp|svg|gif|ico|woff2?)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=2592000'); // 30 days
+    } else if (/\.html?$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  },
+}));
+
+app.listen(PORT, () => {
+  console.log(`TopUpWorld server running at http://localhost:${PORT}`);
+  console.log(`💸 Manual UPI payments → ${UPI_NAME} (${UPI_ID})`);
+});

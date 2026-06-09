@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-GFJMQ5M5JL"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-GFJMQ5M5JL');
+  </script>
+  <title>Order status — TopUpWorld</title>
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <meta name="theme-color" content="#ff6a00" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="/" class="brand">
+        <span class="brand-mark"><svg viewBox="0 0 40 40" width="34" height="34" fill="none">
+          <defs><linearGradient id="lg" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#ff8a3d"/><stop offset="1" stop-color="#ff5a00"/></linearGradient></defs>
+          <rect x="1" y="1" width="38" height="38" rx="11" fill="url(#lg)"/>
+          <path d="M22.5 8 12 22.5h6.4L16 32l11.2-15.4H20L22.5 8z" fill="#fff"/></svg></span>
+        <span class="brand-name">TopUp<span>World</span></span>
+      </a>
+    </div>
+  </header>
+
+  <main class="container page-wrap">
+    <div class="empty-state" id="statusBox">
+      <div class="es-emoji" id="statusIcon">⏳</div>
+      <h2 id="statusTitle">Checking your payment…</h2>
+      <p id="statusMsg">Hang tight while we confirm your order.</p>
+      <div id="statusActions"></div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-bottom" style="border:none">© <span id="year"></span> TopUpWorld. Demo project.</div>
+  </footer>
+
+  <script src="js/config.js"></script><script src="js/catalog.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    (function () {
+      const API_BASE = window.TUZ_API_BASE || '';
+      const orderId = new URLSearchParams(location.search).get('order_id');
+      const icon = document.getElementById('statusIcon');
+      const title = document.getElementById('statusTitle');
+      const msg = document.getElementById('statusMsg');
+      const actions = document.getElementById('statusActions');
+
+      function show(ic, t, m, html) {
+        icon.textContent = ic; title.textContent = t; msg.textContent = m;
+        actions.innerHTML = html || '';
+      }
+
+      if (!orderId) {
+        show('❓', 'No order found', 'We could not find an order reference.',
+          '<a class="btn btn-primary btn-lg" href="/">Back to home</a>');
+        return;
+      }
+
+      let tries = 0;
+      async function poll() {
+        tries++;
+        try {
+          const res = await fetch(API_BASE + '/api/order/' + encodeURIComponent(orderId));
+          const data = await res.json();
+
+          if (data.status === 'DELIVERED') {
+            window.Cart.clear();
+            show('✅', 'Order delivered!',
+              'Your top-up for order ' + orderId + ' has been approved and delivered.',
+              '<div class="delivery-code"><span>Your code / details</span><strong>' + (data.deliveryCode || 'Sent to your email & phone') + '</strong></div>'
+              + '<a class="btn btn-primary btn-lg" href="/">Top up again</a>');
+            return;
+          }
+          if (data.status === 'AWAITING_APPROVAL') {
+            show('🔎', 'Verifying your payment',
+              'We\'ve received your screenshot for order ' + orderId + '. Our team is checking it now — '
+              + 'your code will be sent to your email & phone once approved.',
+              '<a class="btn btn-ghost btn-lg" href="/">Back to home</a>');
+          } else if (data.status === 'AWAITING_PAYMENT') {
+            show('💳', 'Waiting for payment',
+              'We haven\'t received a payment screenshot for order ' + orderId + ' yet.',
+              '<a class="btn btn-primary btn-lg" href="/cart">Go to checkout</a>');
+          } else if (data.status === 'REJECTED') {
+            show('❌', 'Payment not verified',
+              data.rejectReason || 'We couldn\'t verify your payment. Please contact support.',
+              '<a class="btn btn-primary btn-lg" href="/#support">Contact support</a>');
+            return;
+          }
+        } catch (e) { /* keep polling */ }
+        if (tries < 40) setTimeout(poll, 4000);
+        else show('🔎', 'Still verifying',
+          'Your order is being reviewed. We\'ll send your code to your email & phone shortly.',
+          '<a class="btn btn-primary btn-lg" href="/">Back to home</a>');
+      }
+      poll();
+    })();
+  </script>
+</body>
+</html>
