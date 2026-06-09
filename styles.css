@@ -23,6 +23,13 @@
   --gutter: clamp(16px, 3.5vw, 56px);
 }
 
+@media (max-width: 900px) {
+    .container {
+        width: 90%;
+        max-width: 100%;
+    }
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
 body { font-family: 'Inter', system-ui, -apple-system, sans-serif; color: var(--ink);
@@ -342,19 +349,6 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 .denom-amt .cur-ic { width: 20px; height: 20px; margin: 0; vertical-align: middle; }
 .denom-price { display: inline-block; color: var(--orange); font-size: 1.05rem; font-weight: 800; }
 .denom.is-active::after { content: '✓'; position: absolute; bottom: .5rem; right: .6rem; color: var(--orange); font-weight: 800; font-size: .8rem; }
-/* Flash sale denom (Free Fire & BGMI mega pack) */
-.denom-flash { border-color: #ff3b3b; background: linear-gradient(180deg, rgba(255,59,59,.14), rgba(255,106,0,.06));
-  animation: denomFlash 1.1s ease-in-out infinite; }
-.denom-flash:hover { border-color: #ff5a5a; }
-.denom-flash .flash-flag { background: linear-gradient(90deg,#ff3b3b,#ff6a00); font-size: .58rem; left: 0; right: 0;
-  border-radius: 0; border-bottom-left-radius: 0; text-align: center; padding: .22rem .3rem; }
-.denom-flash .denom-amt { margin-top: .9rem; }
-.denom-was { color: var(--muted); text-decoration: line-through; font-weight: 600; font-size: .85rem; margin-right: .25rem; }
-@keyframes denomFlash {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255,59,59,.55); }
-  50% { box-shadow: 0 0 14px 3px rgba(255,59,59,.55); }
-}
-@media (prefers-reduced-motion: reduce) { .denom-flash { animation: none; } }
 .pay-methods { display: flex; flex-wrap: wrap; gap: .5rem; }
 .pay-method { border: 1.5px solid var(--line); background: #1b1b1b; border-radius: 999px;
   padding: .6rem 1.2rem; cursor: pointer; font-size: .9rem; transition: .2s; color: var(--ink); }
@@ -1012,4 +1006,70 @@ body { overflow-x: hidden; width: 100%; max-width: 100%; position: relative; }
   .voucher-card:hover, .stat:hover, .step:hover, .feature:hover { transform: none; box-shadow: var(--shadow-sm); }
   /* Gentle press feedback instead */
   .game-card:active, .offer-card:active, .trend-card:active, .voucher-card:active { transform: scale(.985); }
+}
+
+/* ============================================================
+   Mobile shopping polish — compact, professional cards
+   (overrides earlier mobile rules; appears last so it wins)
+   ============================================================ */
+@media (max-width: 700px) {
+  /* Game / trending cards: smaller & denser, peek the next card */
+  .games-grid, .trending-rail { gap: .6rem; padding-bottom: .6rem; }
+  .game-card { flex-basis: 42vw; border-radius: 13px; }
+  .trend-card { flex: 0 0 40vw; border-radius: 13px; }
+  .game-meta { padding: .6rem .7rem .8rem; }
+  .game-meta h3 { font-size: .92rem; }
+  .game-meta p { font-size: .74rem; margin-top: .1rem; }
+  .game-badge { font-size: .62rem; padding: .2rem .45rem; }
+
+  /* Offers / vouchers: tidy 2-up, smaller */
+  .offers-grid, .vouchers-grid { gap: .6rem; }
+  .offer-card { border-radius: 13px; }
+  .offer-meta { padding: .55rem .7rem .7rem; }
+  .offer-meta h3 { font-size: .88rem; }
+  .offer-meta p { font-size: .72rem; }
+  .offer-price .op-deal { font-size: 1rem; }
+  .offer-price .op-base { font-size: .78rem; }
+  .voucher-card { border-radius: 13px; padding: .85rem; min-height: 118px; }
+  .voucher-card h3 { font-size: .98rem; }
+  .voucher-card .vc-amt { font-size: 1.2rem; }
+  .voucher-card .vc-price { font-size: .95rem; }
+
+  /* ===== Checkout — compact, app-like ===== */
+  .page-wrap { padding-top: .4rem; }
+  .page-title { font-size: 1.4rem; }
+  .crumbs { padding: .7rem 0; font-size: .8rem; }
+  .checkout-grid, .cart-grid { gap: 1rem; }
+  .panel, .summary-card { padding: 1rem 1.05rem; border-radius: 14px; }
+  .co-section { margin-bottom: 1rem; }
+  .panel-title { font-size: 1rem; margin-bottom: .85rem; }
+  .summary-card h3 { font-size: 1.05rem; margin-bottom: .8rem; }
+  .mini-item { gap: .6rem; }
+  .mini-item img, .mini-item .vch-thumb { width: 38px; height: 50px; }
+  .mini-item .mi-name { font-size: .85rem; }
+  .mini-item .mi-sub { font-size: .73rem; }
+  .deliver-row { padding: .6rem .7rem; gap: .6rem; }
+  .deliver-row img, .deliver-row .vch-thumb { width: 40px; height: 52px; }
+  .summary-line { font-size: .88rem; padding: .3rem 0; }
+  .summary-line.total { font-size: 1.1rem; }
+  .coupon-box { padding: .75rem; margin: .9rem 0; }
+  .pay-badges { gap: .35rem; }
+  .pay-badges span { font-size: .66rem; padding: .28rem .5rem; }
+  .secure-note { font-size: .76rem; }
+
+  /* Game detail: compact pack cards */
+  .denom { padding: .85rem .55rem .7rem; border-radius: 12px; }
+  .denom-amt { font-size: .92rem; gap: .25rem; }
+  .denom-price { font-size: .98rem; }
+  .denom-flag { font-size: .58rem; }
+}
+
+@media (max-width: 430px) {
+  .game-card { flex-basis: 46vw; }
+  .trend-card { flex: 0 0 44vw; }
+  .game-meta h3 { font-size: .88rem; }
+  .voucher-card .vc-amt { font-size: 1.12rem; }
+  .page-title { font-size: 1.3rem; }
+  .denoms { gap: .55rem; }
+  .denom-amt { font-size: .88rem; }
 }

@@ -40,43 +40,25 @@ export const PRICES = {
   // Pokémon UNITE
   'pokemon-unite-60': 79, 'pokemon-unite-250': 319, 'pokemon-unite-490': 599,
   'pokemon-unite-1000': 1199, 'pokemon-unite-2525': 2999, 'pokemon-unite-5275': 5999,
+  // Vouchers / gift cards (purchasable like games)
+  'vch-100': 100, 'vch-250': 250, 'vch-500': 500, 'vch-1000': 1000,
+  'vch-2000': 2000, 'vch-5000': 5000, 'vch-steam-500': 510, 'vch-gplay-500': 505,
 };
 
 export const FEE_RATE = 0.02; // 2% processing fee, matches the client display
 
 /**
- * Discount coupons. Codes are matched case-insensitively.
- *  type    : 'percent' (value = % off) or 'flat' (value = ₹ off)
- *  skus    : if set, the discount only applies to these SKUs' line totals
- *  label   : shown to the customer when the coupon is valid
+ * Discount from an admin-created coupon, applied to the WHOLE cart subtotal
+ * (every pack and voucher). `coupon` is { code, type:'percent'|'flat', value }.
  */
-export const COUPONS = {
-  NEWUSER: {
-    type: 'percent',
-    value: 50,
-    skus: ['free-fire-5600', 'bgmi-8100'], // Free Fire & BGMI "Mega pack"
-    label: '50% off Free Fire & BGMI Mega packs',
-  },
-};
-
-/** Compute the discount a coupon grants for the given priced lines. */
-export function computeDiscount(code, lines) {
-  if (!code) return { code: null, discount: 0, valid: false, message: '' };
-  const c = COUPONS[String(code).trim().toUpperCase()];
-  if (!c) return { code: null, discount: 0, valid: false, message: 'Invalid coupon code.' };
-  let eligible = 0;
-  for (const l of lines) {
-    if (c.skus && !c.skus.includes(l.sku)) continue;
-    eligible += l.lineTotal;
-  }
-  if (eligible <= 0) {
-    return { code: null, discount: 0, valid: false,
-      message: 'This coupon applies only to Free Fire & BGMI Mega packs.' };
-  }
-  const discount = c.type === 'percent'
-    ? Math.round(eligible * c.value / 100)
-    : Math.min(c.value, eligible);
-  return { code: String(code).trim().toUpperCase(), discount, valid: true, message: c.label };
+export function couponDiscount(coupon, subtotal) {
+  if (!coupon || subtotal <= 0) return { code: null, discount: 0, valid: false, message: '' };
+  const discount = coupon.type === 'flat'
+    ? Math.min(Math.round(coupon.value), subtotal)
+    : Math.round(subtotal * coupon.value / 100);
+  if (discount <= 0) return { code: null, discount: 0, valid: false, message: '' };
+  const label = coupon.type === 'flat' ? `₹${coupon.value} off` : `${coupon.value}% off`;
+  return { code: coupon.code, discount, valid: true, message: label };
 }
 
 /**
@@ -101,8 +83,8 @@ export const VERIFY_NEEDS_SERVER = { 'mobile-legends': true };
 
 /** Recompute the authoritative total from SKUs the client sent.
  *  `priceFor(sku, basePrice)` lets the caller apply admin overrides.
- *  `couponCode` (optional) applies a discount before the processing fee. */
-export function priceCart(items, priceFor, couponCode) {
+ *  `coupon` (optional) is an admin coupon object applied to the whole subtotal. */
+export function priceCart(items, priceFor, coupon) {
   const resolve = typeof priceFor === 'function' ? priceFor : (_sku, base) => base;
   let subtotal = 0;
   const lines = [];
@@ -117,7 +99,7 @@ export function priceCart(items, priceFor, couponCode) {
       serverId: String(it.serverId || '').slice(0, 64),
       username: String(it.username || '').slice(0, 64) });
   }
-  const disc = computeDiscount(couponCode, lines);
+  const disc = couponDiscount(coupon, subtotal);
   const discounted = Math.max(0, subtotal - disc.discount);
   const fee = discounted > 0 ? Math.round(discounted * FEE_RATE) : 0;
   return {

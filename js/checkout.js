@@ -78,7 +78,7 @@
             <input id="couponInput" type="text" placeholder="Coupon code (e.g. NEWUSER)" autocomplete="off" />
             <button class="btn btn-dark btn-sm" id="couponBtn" type="button">Apply</button>
           </div>
-          <p class="coupon-msg" id="couponMsg">🎉 Use <strong>NEWUSER</strong> for 50% off Free Fire &amp; BGMI Mega packs.</p>
+          <p class="coupon-msg" id="couponMsg">Have a coupon code? Enter it above to get your discount.</p>
         </div>
         <div class="summary-line"><span>Subtotal</span><strong id="sumSubtotal">${window.inr(t.subtotal)}</strong></div>
         <div class="summary-line" id="sumDiscountRow" style="display:none"><span>Discount</span><strong id="sumDiscount" style="color:#34c759">-₹0</strong></div>
@@ -101,33 +101,29 @@
   let totals = { subtotal: t.subtotal, fee: t.fee, total: t.total, discount: 0 };
 
   const FEE_RATE = 0.02; // 2% processing — mirrors cart.js / server
-  const COUPONS = {
-    NEWUSER: {
-      type: 'percent', value: 50,
-      skus: ['free-fire-5600', 'bgmi-8100'], // Free Fire & BGMI "Mega pack"
-      label: '50% off Free Fire & BGMI Mega packs',
-    },
-  };
+
+  // Admin-created coupons come from /api/config (window.SiteConfig.coupons) and
+  // apply to the WHOLE cart — every pack and voucher.
+  function findCoupon(code) {
+    const c = String(code || '').trim().toUpperCase();
+    const list = (window.SiteConfig && window.SiteConfig.coupons) || [];
+    return list.find(x => x && x.active !== false && String(x.code).toUpperCase() === c) || null;
+  }
 
   function computeCoupon(code) {
     const list = window.Cart.items();
     const subtotal = list.reduce((s, it) => s + it.lineTotal, 0);
-    const c = COUPONS[String(code || '').trim().toUpperCase()];
+    const c = findCoupon(code);
     if (!c) return { ok: false, subtotal, discount: 0, message: 'Invalid coupon code.' };
-    const eligible = list
-      .filter(it => c.skus.includes(it.sku))
-      .reduce((s, it) => s + it.lineTotal, 0);
-    if (eligible <= 0) {
-      return { ok: false, subtotal, discount: 0,
-        message: 'This code applies only to Free Fire & BGMI Mega packs.' };
-    }
-    const discount = c.type === 'percent'
-      ? Math.round(eligible * c.value / 100)
-      : Math.min(c.value, eligible);
+    const discount = c.type === 'flat'
+      ? Math.min(Math.round(c.value), subtotal)
+      : Math.round(subtotal * c.value / 100);
+    if (discount <= 0) return { ok: false, subtotal, discount: 0, message: 'Coupon not applicable.' };
     const discounted = Math.max(0, subtotal - discount);
     const fee = discounted > 0 ? Math.round(discounted * FEE_RATE) : 0;
-    return { ok: true, code: String(code).trim().toUpperCase(), subtotal, discount, fee,
-      total: discounted + fee, message: c.label };
+    const label = c.type === 'flat' ? `₹${c.value} off` : `${c.value}% off`;
+    return { ok: true, code: String(c.code).toUpperCase(), subtotal, discount, fee,
+      total: discounted + fee, message: label };
   }
 
   function paymentItems() {
@@ -187,7 +183,7 @@
     const input = document.getElementById('couponInput');
     const msg = document.getElementById('couponMsg');
     input.value = '';
-    msg.innerHTML = '🎉 Use <strong>NEWUSER</strong> for 50% off Free Fire &amp; BGMI Mega packs.';
+    msg.innerHTML = 'Have a coupon code? Enter it above to get your discount.';
     msg.className = 'coupon-msg';
     couponBox().classList.remove('applied');
     document.getElementById('couponBtn').textContent = 'Apply';

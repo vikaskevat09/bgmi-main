@@ -82,13 +82,13 @@
   };
 
   /* ----- Site config (hero, price overrides, logos) loaded from backend ----- */
-  window.SiteConfig = { hero: null, priceOverrides: {}, labelOverrides: {}, logos: {} };
+  window.SiteConfig = { hero: null, priceOverrides: {}, labelOverrides: {}, logos: {}, coupons: [] };
   window.configReady = fetch((window.TUZ_API_BASE || '') + '/api/config')
     .then(r => r.json())
     .then(c => {
       window.SiteConfig = { hero: c.hero || null, priceOverrides: c.priceOverrides || {},
         labelOverrides: c.labelOverrides || {}, logos: c.logos || {}, socials: c.socials || {},
-        currencyIcons: c.currencyIcons || {}, siteLogo: c.siteLogo || '' };
+        currencyIcons: c.currencyIcons || {}, siteLogo: c.siteLogo || '', coupons: c.coupons || [] };
       // Apply price + label overrides onto the catalog so all pages reflect admin edits.
       if (window.CATALOG) {
         for (const g of window.CATALOG.games) {

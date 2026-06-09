@@ -18,12 +18,13 @@ const DATA_DIR = path.join(__dirname, 'data');
 const FILE = path.join(DATA_DIR, 'config.json');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-let cfg = { priceOverrides: {}, labelOverrides: {}, hero: [], logos: {}, socials: {}, currencyIcons: {}, siteLogo: '' };
+let cfg = { priceOverrides: {}, labelOverrides: {}, hero: [], logos: {}, socials: {}, currencyIcons: {}, siteLogo: '', coupons: [] };
 try {
   if (fs.existsSync(FILE)) {
     const loaded = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-    cfg = { priceOverrides: {}, labelOverrides: {}, hero: [], logos: {}, socials: {}, currencyIcons: {}, siteLogo: '', ...loaded };
+    cfg = { priceOverrides: {}, labelOverrides: {}, hero: [], logos: {}, socials: {}, currencyIcons: {}, siteLogo: '', coupons: [], ...loaded };
     if (!Array.isArray(cfg.hero)) cfg.hero = [];
+    if (!Array.isArray(cfg.coupons)) cfg.coupons = [];
     // Drop any legacy text-based hero slides (keep only image slides).
     cfg.hero = cfg.hero.filter(h => h && h.image);
   } else {
@@ -44,7 +45,35 @@ function save() {
 export function getConfig() { return cfg; }
 export function publicConfig() {
   return { hero: cfg.hero, priceOverrides: cfg.priceOverrides, labelOverrides: cfg.labelOverrides,
-    logos: cfg.logos, socials: cfg.socials, currencyIcons: cfg.currencyIcons, siteLogo: cfg.siteLogo };
+    logos: cfg.logos, socials: cfg.socials, currencyIcons: cfg.currencyIcons, siteLogo: cfg.siteLogo,
+    coupons: cfg.coupons };
+}
+
+/* ---- Coupons (admin-created, apply to the whole cart: packs + vouchers) ----
+ * Shape: { code, type:'percent'|'flat', value, active }
+ */
+export function getCoupons() { return cfg.coupons; }
+export function addCoupon({ code, type, value }) {
+  const c = String(code || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!c || !/^[A-Z0-9_-]{3,20}$/.test(c)) throw new Error('Code must be 3–20 letters/numbers.');
+  const t = type === 'flat' ? 'flat' : 'percent';
+  const v = Math.round(Number(value));
+  if (!Number.isFinite(v) || v <= 0) throw new Error('Enter a valid discount value.');
+  if (t === 'percent' && v > 90) throw new Error('Percent discount cannot exceed 90%.');
+  const existing = cfg.coupons.find(x => x.code === c);
+  if (existing) { existing.type = t; existing.value = v; existing.active = true; }
+  else cfg.coupons.push({ code: c, type: t, value: v, active: true });
+  save();
+  return cfg.coupons;
+}
+export function removeCoupon(code) {
+  cfg.coupons = cfg.coupons.filter(x => x.code !== String(code || '').trim().toUpperCase());
+  save();
+  return cfg.coupons;
+}
+export function findCoupon(code) {
+  const c = String(code || '').trim().toUpperCase();
+  return cfg.coupons.find(x => x.code === c && x.active) || null;
 }
 
 /* Site logo (brand logo in header/footer) */

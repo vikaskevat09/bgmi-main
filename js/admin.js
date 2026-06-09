@@ -65,13 +65,60 @@
     t.addEventListener('click', () => switchView(t.dataset.view)));
   function switchView(view) {
     document.querySelectorAll('.admin-tab').forEach(t => t.classList.toggle('is-active', t.dataset.view === view));
-    $('adminViewTitle').textContent = { orders: 'Orders', prices: 'Prices', logos: 'Game Logos', hero: 'Hero Banners', brand: 'Site Logo', socials: 'Social Links' }[view];
+    $('adminViewTitle').textContent = { orders: 'Orders', prices: 'Prices', coupons: 'Coupons' }[view] || 'Admin';
     if (view === 'orders') renderOrders();
     else if (view === 'prices') renderPrices();
-    else if (view === 'logos') renderLogos();
-    else if (view === 'hero') renderHero();
-    else if (view === 'brand') renderBrand();
-    else if (view === 'socials') renderSocials();
+    else if (view === 'coupons') renderCoupons();
+  }
+
+  /* ---------- COUPONS (apply to the whole cart — packs + vouchers) ---------- */
+  async function renderCoupons() {
+    const view = $('adminView');
+    view.innerHTML = `<div class="admin-card"><p class="admin-hint">Loading…</p></div>`;
+    let coupons = [];
+    try { coupons = (await api('GET', '/api/admin/coupons')).coupons || []; }
+    catch (e) { view.innerHTML = `<div class="admin-card"><p class="admin-hint">⚠️ ${esc(e.message)}</p></div>`; return; }
+
+    view.innerHTML = `
+      <div class="admin-card">
+        <h3>Create a coupon</h3>
+        <p class="admin-hint">Coupons apply to the <strong>whole cart</strong> — every game pack and voucher. They're never shown publicly; customers just type the code at checkout.</p>
+        <div class="coupon-create">
+          <div class="cc-field"><label>Code</label><input id="cpCode" type="text" placeholder="e.g. WELCOME10" maxlength="20" /></div>
+          <div class="cc-field"><label>Type</label><select id="cpType"><option value="percent">% off</option><option value="flat">₹ off</option></select></div>
+          <div class="cc-field cc-val"><label>Value</label><input id="cpValue" type="number" min="1" placeholder="10" /></div>
+          <button class="btn btn-primary" id="cpAdd">Add coupon</button>
+        </div>
+      </div>
+      <div class="admin-card">
+        <h3>Active coupons (${coupons.length})</h3>
+        <div class="coupon-list">
+          ${coupons.length ? coupons.map(couponRow).join('') : '<p class="muted">No coupons yet — create one above.</p>'}
+        </div>
+      </div>`;
+
+    $('cpAdd').addEventListener('click', async () => {
+      const code = $('cpCode').value.trim();
+      const type = $('cpType').value;
+      const value = parseInt($('cpValue').value, 10);
+      if (!code) { window.toast('⚠️ Enter a code.', 'err'); return; }
+      if (!Number.isFinite(value) || value <= 0) { window.toast('⚠️ Enter a valid value.', 'err'); return; }
+      try { await api('POST', '/api/admin/coupons', { code, type, value }); saved('✓ Coupon added'); renderCoupons(); }
+      catch (e) { window.toast('⚠️ ' + e.message, 'err'); }
+    });
+    view.querySelectorAll('[data-del-coupon]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('Delete coupon ' + b.dataset.delCoupon + '?')) return;
+      try { await api('DELETE', '/api/admin/coupons/' + encodeURIComponent(b.dataset.delCoupon)); saved('✓ Deleted'); renderCoupons(); }
+      catch (e) { window.toast('⚠️ ' + e.message, 'err'); }
+    }));
+  }
+
+  function couponRow(c) {
+    const val = c.type === 'flat' ? ('₹' + c.value + ' off') : (c.value + '% off');
+    return `<div class="coupon-item">
+      <div class="ci-meta"><strong>${esc(c.code)}</strong><span>${val} · applies to whole cart</span></div>
+      <button class="btn btn-ghost btn-sm" data-del-coupon="${esc(c.code)}">Delete</button>
+    </div>`;
   }
 
   /* ---------- ORDERS (manual UPI approval) ---------- */

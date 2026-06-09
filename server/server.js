@@ -190,6 +190,16 @@ app.post('/api/admin/socials', requireAdmin, (req, res) => {
   res.json({ socials: admin.setSocials(req.body.socials || {}) });
 });
 
+/* ---- Admin: coupons (apply to the whole cart — packs + vouchers) ---- */
+app.get('/api/admin/coupons', requireAdmin, (_req, res) => res.json({ coupons: admin.getCoupons() }));
+app.post('/api/admin/coupons', requireAdmin, (req, res) => {
+  try { res.json({ coupons: admin.addCoupon(req.body || {}) }); }
+  catch (e) { res.status(400).json({ message: e.message }); }
+});
+app.delete('/api/admin/coupons/:code', requireAdmin, (req, res) => {
+  res.json({ coupons: admin.removeCoupon(req.params.code) });
+});
+
 /* ---- Admin: logo upload / remove ----
  * Cloudinary (if configured) keeps it permanent; else local file (dev). */
 app.post('/api/admin/logo/:gameId', requireAdmin, async (req, res) => {
@@ -378,7 +388,7 @@ app.post('/api/price-cart', (req, res) => {
     if (!Array.isArray(items) || !items.length) {
       return res.status(400).json({ message: 'Cart is empty.' });
     }
-    const priced = priceCart(items, admin.priceFor, coupon);
+    const priced = priceCart(items, admin.priceFor, admin.findCoupon(coupon));
     res.json({
       subtotal: priced.subtotal,
       discount: priced.discount,
@@ -416,7 +426,7 @@ app.post('/api/create-order', (req, res) => {
       return res.status(400).json({ message: 'Missing customer details.' });
     }
     // Authoritative pricing — ignores any amount the client might send.
-    const priced = priceCart(items, admin.priceFor, coupon);
+    const priced = priceCart(items, admin.priceFor, admin.findCoupon(coupon));
     if (priced.total <= 0) return res.status(400).json({ message: 'Invalid order total.' });
 
     const orderId = 'TUW' + Date.now().toString(36).toUpperCase() + crypto.randomBytes(2).toString('hex').toUpperCase();

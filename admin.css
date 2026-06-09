@@ -162,3 +162,27 @@
   .ord-side { order: -1; }
   .ord-proof img { max-height: 260px; object-fit: contain; }
 }
+
+/* ============================================================
+   Coupons
+   ============================================================ */
+.coupon-create { display: flex; flex-wrap: wrap; gap: .8rem; align-items: flex-end; margin-top: 1rem; }
+.cc-field { display: flex; flex-direction: column; gap: .35rem; }
+.cc-field label { font-size: .78rem; color: var(--muted); font-weight: 600; }
+.cc-field input, .cc-field select { padding: .6rem .8rem; border: 1px solid var(--line); border-radius: 10px;
+  background: #2a2a2a; color: #fff; font-family: inherit; font-size: .92rem; min-width: 150px; }
+.cc-field.cc-val input { min-width: 110px; }
+.cc-field input:focus, .cc-field select:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 4px rgba(255,106,0,.14); }
+.coupon-create .btn { height: 42px; }
+
+.coupon-list { display: flex; flex-direction: column; gap: .6rem; margin-top: 1rem; }
+.coupon-item { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px; padding: .8rem 1rem; }
+.ci-meta strong { font-size: 1.05rem; letter-spacing: .5px; display: block; }
+.ci-meta span { font-size: .82rem; color: var(--muted); }
+
+@media (max-width: 620px) {
+  .coupon-create { flex-direction: column; align-items: stretch; }
+  .cc-field input, .cc-field select { min-width: 0; width: 100%; }
+  .coupon-create .btn { width: 100%; }
+}
