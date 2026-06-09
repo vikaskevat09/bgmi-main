@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-GFJMQ5M5JL"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-GFJMQ5M5JL');
+  </script>
+  <title>Contact us — TopUpWorld</title>
+  <meta name="description" content="Get in touch with TopUpWorld support — we're online around the clock to help with your game top-up orders." />
+  <link rel="icon" type="image/png" href="/assets/brand/brandlogo.png" />
+  <meta name="theme-color" content="#ff6a00" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="container topbar-inner">
+      <span class="topbar-left">We're here to help</span>
+      <div class="topbar-right"><a href="/">Back to store</a></div>
+    </div>
+  </div>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="/" class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 40 40" width="34" height="34" fill="none">
+            <defs><linearGradient id="lg" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#ff8a3d"/><stop offset="1" stop-color="#ff5a00"/></linearGradient></defs>
+            <rect x="1" y="1" width="38" height="38" rx="11" fill="url(#lg)"/>
+            <path d="M22.5 8 12 22.5h6.4L16 32l11.2-15.4H20L22.5 8z" fill="#fff"/></svg>
+        </span>
+        <span class="brand-name">TopUp<span>World</span></span>
+      </a>
+      <div class="header-actions" style="margin-left:auto">
+        <a class="cart-link" href="/cart" aria-label="Cart">🛒<span class="cart-count" id="cartCount">0</span></a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container page-wrap">
+    <div class="crumbs"><a href="/">Home</a><span class="sep">›</span><span>Contact us</span></div>
+    <h1 class="page-title">Contact us</h1>
+    <p class="muted" style="margin-bottom:1.6rem">Questions about an order or a top-up? Reach us on any channel below — we usually reply within minutes.</p>
+
+    <div class="contact-grid">
+      <a class="contact-card" href="https://wa.me/919999999999" target="_blank" rel="noopener noreferrer">
+        <div class="contact-ic" style="background:#25d366">💬</div>
+        <div><strong>WhatsApp</strong><span>Fastest — chat with us now</span></div>
+      </a>
+      <a class="contact-card" href="https://t.me/topupworld" target="_blank" rel="noopener noreferrer">
+        <div class="contact-ic" style="background:#229ed9">✈️</div>
+        <div><strong>Telegram</strong><span>@topupworld</span></div>
+      </a>
+      <a class="contact-card" href="mailto:support@topupworld.shop">
+        <div class="contact-ic" style="background:var(--orange)">✉️</div>
+        <div><strong>Email</strong><span>support@topupworld.shop</span></div>
+      </a>
+    </div>
+
+    <div class="panel contact-form">
+      <div class="panel-title"><span class="step-badge">✍</span> Send us a message</div>
+      <div class="co-fields">
+        <div class="field"><label for="cfName">Your name</label><input id="cfName" type="text" placeholder="Your name" /></div>
+        <div class="field"><label for="cfOrder">Order ID <span class="opt">(optional)</span></label><input id="cfOrder" type="text" placeholder="e.g. TUW..." /></div>
+        <div class="field full"><label for="cfMsg">Message</label><textarea id="cfMsg" rows="5" placeholder="How can we help?" style="width:100%;padding:.8rem .95rem;border:1px solid var(--line);border-radius:10px;background:#2a2a2a;color:#fff;font-family:inherit;font-size:.95rem"></textarea></div>
+      </div>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem">
+        <button class="btn btn-primary btn-lg" id="cfWhatsApp" type="button">Send on WhatsApp</button>
+        <button class="btn btn-ghost btn-lg" id="cfEmail" type="button">Send by Email</button>
+      </div>
+      <p class="field-hint">Our support team is available 24/7.</p>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-bottom" style="border:none">© <span id="year"></span> TopUpWorld. All rights reserved.</div>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/catalog.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    (function () {
+      // ⬇️ Replace these with your real contact details
+      var WHATSAPP = '919999999999';        // country code + number, no +
+      var EMAIL = 'support@topupworld.shop';
+
+      function compose() {
+        var name = (document.getElementById('cfName').value || '').trim();
+        var order = (document.getElementById('cfOrder').value || '').trim();
+        var msg = (document.getElementById('cfMsg').value || '').trim();
+        if (!msg) { window.toast && window.toast('⚠️ Please type your message.', 'err'); return null; }
+        var text = 'Hi TopUpWorld,%0A%0A' + encodeURIComponent(msg);
+        if (order) text += '%0A%0AOrder ID: ' + encodeURIComponent(order);
+        if (name) text += '%0A- ' + encodeURIComponent(name);
+        return text;
+      }
+      document.getElementById('cfWhatsApp').addEventListener('click', function () {
+        var t = compose(); if (!t) return;
+        window.open('https://wa.me/' + WHATSAPP + '?text=' + t, '_blank');
+      });
+      document.getElementById('cfEmail').addEventListener('click', function () {
+        var t = compose(); if (!t) return;
+        var subj = encodeURIComponent('Support request' + (document.getElementById('cfOrder').value ? ' — ' + document.getElementById('cfOrder').value : ''));
+        window.location.href = 'mailto:' + EMAIL + '?subject=' + subj + '&body=' + t.replace(/%0A/g, '%0D%0A');
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -480,6 +480,28 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 .mini-item .mi-sub { font-size: .78rem; color: var(--muted); }
 .mini-item .mi-price { margin-left: auto; font-weight: 700; font-size: .9rem; }
 
+/* Voucher / gift-card thumb (used where there's no game cover) */
+.vch-thumb { width: 44px; height: 58px; flex-shrink: 0; border-radius: 8px; display: grid; place-items: center;
+  font-size: 1.4rem; background: linear-gradient(135deg, var(--orange), #c1121f); box-shadow: var(--shadow-sm); }
+.mini-item .vch-thumb { width: 40px; height: 52px; }
+.deliver-row .vch-thumb { width: 44px; height: 58px; }
+.cart-row .vch-thumb { width: 64px; height: 85px; font-size: 1.9rem; }
+
+/* ===== Contact page ===== */
+.contact-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem; }
+.contact-card { display: flex; align-items: center; gap: .9rem; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1.1rem 1.2rem; transition: .2s; box-shadow: var(--shadow-sm); }
+.contact-card:hover { border-color: var(--orange); transform: translateY(-2px); }
+.contact-ic { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; font-size: 1.35rem; flex-shrink: 0; color: #fff; }
+.contact-card strong { display: block; font-size: 1rem; }
+.contact-card span { color: var(--muted); font-size: .85rem; }
+.contact-form .co-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.contact-form .field.full { grid-column: 1 / -1; }
+@media (max-width: 640px) {
+  .contact-grid { grid-template-columns: 1fr; }
+  .contact-form .co-fields { grid-template-columns: 1fr; }
+}
+
 /* ===== Coupon / promo box ===== */
 .coupon-box { margin: 1.1rem 0; padding: .85rem; border: 1px dashed var(--line);
   border-radius: var(--radius-sm); background: var(--bg-soft); transition: border-color .2s, background .2s; }

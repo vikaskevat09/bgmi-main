@@ -20,6 +20,9 @@
     const yr = document.getElementById('year');
     if (yr) yr.textContent = new Date().getFullYear();
 
+    // Show the brand logo in the header on every page (works without a backend too).
+    renderSiteLogo();
+
     // Subtle shadow on the header once the page is scrolled.
     const header = document.getElementById('siteHeader') || document.querySelector('.site-header');
     if (header) {
@@ -109,10 +112,11 @@
   // If the admin uploaded a brand logo, show it in the header (and footer) in
   // place of the default SVG mark.
   function renderSiteLogo() {
-    const logo = (window.SiteConfig && window.SiteConfig.siteLogo) || 'assets/brand/brandlogo.png';
+    const logo = (window.SiteConfig && window.SiteConfig.siteLogo) || 'assets/brand/brandlogo.webp';
     const url = window.assetUrl ? window.assetUrl(logo) : logo;
+    const fallback = window.assetUrl ? window.assetUrl('assets/brand/brandlogo.png') : 'assets/brand/brandlogo.png';
     document.querySelectorAll('.brand .brand-mark').forEach(mark => {
-      mark.innerHTML = `<img src="${url}" alt="logo" />`;
+      mark.innerHTML = `<img src="${url}" alt="TopUpWorld logo" onerror="this.onerror=null;this.src='${fallback}'" />`;
     });
   }
 
@@ -124,7 +128,7 @@
     const order = ['facebook', 'instagram', 'x', 'youtube', 'discord', 'telegram', 'whatsapp'];
     const map = { facebook: 'fb', instagram: 'ig', x: 'x', youtube: 'yt', discord: 'dc', telegram: 'tg', whatsapp: 'wa' };
     const active = order.filter(k => s[k]);
-    if (!active.length) { wrap.style.display = 'none'; return; }
+    if (!active.length) return; // leave the static footer links in place
     wrap.style.display = '';
     wrap.innerHTML = active.map(k =>
       `<a href="${s[k]}" target="_blank" rel="noopener noreferrer" aria-label="${k}" data-soc="${map[k]}"></a>`).join('');
@@ -136,6 +140,10 @@
    * (with a cache-busting version). Otherwise tries png → jpg → webp → svg.
    */
   window.coverHTML = function (id, alt, className) {
+    // Vouchers/gift cards have no game cover — show a clean gift thumb instead.
+    if (id === 'voucher') {
+      return `<div class="vch-thumb${className ? ' ' + className : ''}" role="img" aria-label="${alt || 'Voucher'}">🎁</div>`;
+    }
     const logos = (window.SiteConfig && window.SiteConfig.logos) || {};
     const base = 'assets/games/' + id;
     let src, startExt;
